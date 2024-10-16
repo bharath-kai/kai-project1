@@ -1,0 +1,157 @@
+import bcrypt
+import os
+import yara
+import logging
+import hashlib
+import ctypes
+
+# Setup logging for User Behavior Analytics (UBA)
+logging.basicConfig(filename='user_behavior.log', level=logging.INFO)
+
+# Function to register a new user by taking username and password input
+def register_user():
+    username = input("Enter a new username: ")
+    password = input("Enter a new password: ").encode('utf-8')
+
+    # Hash the password and save to file
+    hashed_password = bcrypt.hashpw(password, bcrypt.gensalt())
+    
+    with open('users.txt', 'a') as f:
+        f.write(f"{username},{hashed_password.decode('utf-8')}\n")
+    
+    print(f"User '{username}' registered successfully.")
+
+# Function to authenticate user login by checking credentials from a file
+def authenticate_user(username, password):
+    # Load users and their hashed passwords from the file
+    if not os.path.exists('users.txt'):
+        print("No users registered. Please register a user first.")
+        return False
+
+    with open('users.txt', 'r') as f:
+        for line in f:
+            stored_username, stored_hashed_password = line.strip().split(',')
+            if username == stored_username:
+                if bcrypt.checkpw(password.encode('utf-8'), stored_hashed_password.encode('utf-8')):
+                    track_user_activity(f"{username} successfully logged in.")
+                    return True
+                else:
+                    track_user_activity(f"Failed login attempt with username: {username}")
+                    return False
+
+    print(f"Username '{username}' not found. Please register.")
+    return False
+
+# User Behavior Analytics (UBA) tracking
+def track_user_activity(action):
+    logging.info(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {action}")
+
+# Memory dump hex dump function
+def hex_dump_memory(ptr, num):
+    try:
+        data = list((num * ctypes.c_byte).from_address(ptr))  # Read memory from pointer
+    except ValueError:
+        return f"Cannot access memory at address 0x{ptr:x}"
+
+    if len(data) == 0:
+        return '<empty>'
+    
+    lines = []
+    for i in range(0, num, 16):
+        line = '%04x | ' % i
+
+        # Print hex bytes
+        for j in range(16):
+            if i + j >= len(data): break
+            line += '%02x ' % abs(data[i + j])
+
+        # Add space and print ASCII characters
+        line += ' | '
+        for j in range(16):
+            if i + j >= len(data): break
+            c = data[i + j] if 0x20 <= data[i + j] <= 0x7e else ord('.')
+            line += chr(c)
+        
+        lines.append(line)
+    
+    return '\n'.join(lines)
+
+# Function to perform YARA-based malware analysis
+def perform_malware_analysis(file_path, yara_rule_path):
+    try:
+        # Load YARA rules from the provided file
+        rules = yara.compile(filepath=yara_rule_path)
+        
+        # Perform memory dump analysis using YARA
+        with open(file_path, 'rb') as f:
+            matches = rules.match(data=f.read())
+        
+        if matches:
+            return f"Malware Detected via YARA: {matches}"
+        else:
+            return "No Malware Detected"
+    except Exception as e:
+        return f"Error analyzing memory dump: {str(e)}"
+
+# Main CLI function to handle registration, login, and memory analysis
+def cli_main():
+    print("Welcome to the Malware Analyzer CLI Tool")
+
+    # Ask user to either register or login
+    action = input("Do you want to (1) Login or (2) Register? Enter 1 or 2: ")
+    
+    if action == '2':
+        register_user()
+
+    username = input("Enter your username: ")
+    password = input("Enter your password: ")
+
+    if not authenticate_user(username, password):
+        print("Login failed. Exiting.")
+        return
+
+    print("Login successful!")
+
+    # Memory dump analysis
+    file_path = input("Enter the path to the memory dump file: ")
+    
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
+    yara_rule_path = input("Enter the path to the YARA rules file: ")
+    
+    if not os.path.exists(yara_rule_path):
+        print(f"YARA rules file not found: {yara_rule_path}")
+        return
+
+    num_bytes = int(input("Enter the number of bytes to dump: "))
+
+    # Simulate memory analysis
+    with open(file_path, 'r') as f:
+        addr_line = f.readlines()[0].split('-')[0]
+        addr = int('0x' + addr_line, 16)
+
+    print(f'Hex dump from 0x{addr:016x}')
+    dump_output = hex_dump_memory(addr, num_bytes)
+    print(dump_output)
+
+    # Perform malware analysis using YARA
+    malware_result = perform_malware_analysis(file_path, yara_rule_path)
+    print(malware_result)
+
+    # Log user activity
+    track_user_activity(f"{username} performed memory dump analysis on {file_path}")
+
+    # Generate a final report
+    with open('report.txt', 'w') as report:
+        report.write(f"User: {username}\n")
+        report.write(f"File Analyzed: {file_path}\n")
+        report.write(f"Hex Dump:\n{dump_output}\n")
+        report.write(f"Malware Analysis:\n{malware_result}\n")
+
+    print("Report generated: report.txt")
+
+# Run the CLI
+if __name__ == "__main__":
+    cli_main()
