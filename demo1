@@ -4,6 +4,7 @@ import yara
 import logging
 import hashlib
 import ctypes
+import time
 
 # Setup logging for User Behavior Analytics (UBA)
 logging.basicConfig(filename='user_behavior.log', level=logging.INFO)
